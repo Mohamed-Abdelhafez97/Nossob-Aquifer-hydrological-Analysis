@@ -1,0 +1,402 @@
+
+Title: "Nossob Aquifer Analysis"
+Date: "2025-01-27"
+
+
+To load the data from the CSV file and generate a Histogram for NO3 [Figure 1]: 
+
+``` {r load_data}
+library(readr)
+setwd("D:/TH Luebeck - Masters Degree - Water Engineering/Semester 1/Higher Mathematics/Exam/code")
+Nossob <- read_delim("D:/TH Luebeck - Masters Degree - Water Engineering/Semester 1/Higher Mathematics/Exam/STAS_Borehole_Database_Nossob.csv", 
+    delim = ";", escape_double = FALSE, col_types = cols(completion = col_character(), 
+        location = col_character(), strike_m = col_double(), 
+        strike_abs_m = col_double(), samdate_tds = col_date(format = "%Y/%m/%d"), 
+        samdate_so4 = col_date(format = "%Y/%m/%d"), 
+        samdate_NO3 = col_date(format = "%Y/%m/%d"), 
+        samdate_f = col_date(format = "%Y/%m/%d"), 
+        samdate_ec = col_date(format = "%Y/%m/%d"), 
+        samdate_wl = col_date(format = "%Y/%m/%d"), 
+        samdate_delta_D = col_date(format = "%Y/%m/%d"), 
+        samdate_delta_O = col_date(format = "%Y/%m/%d"), 
+        samdate_T = col_date(format = "%Y/%m/%d"), 
+        samdate_14C = col_date(format = "%Y/%m/%d")), 
+    trim_ws = TRUE)
+attach(Nossob)
+hist(NO3_mg_l)
+```
+
+
+
+
+
+To load generate a map of groundwater points and plot them [Figure 2]: 
+```{r 1st- Groundwater points plotting}
+
+# Install required packages
+if (!requireNamespace("rnaturalearth", quietly = TRUE)) {
+    install.packages("rnaturalearth")
+}
+if (!requireNamespace("rnaturalearthdata", quietly = TRUE)) {
+    install.packages("rnaturalearthdata")
+}
+if (!requireNamespace("sf", quietly = TRUE)) {
+    install.packages("sf")
+}
+
+library(spData)
+library(sp)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
+
+# Filter out rows with missing values in 'long', 'lat', and 'wl_mbgl'
+NossobC <- Nossob[complete.cases(Nossob[, c("long", "lat", "wl_mbgl")]), ]
+NossobC <- as.data.frame(NossobC)
+
+# Create SpatialPoints
+NossobCsp <- SpatialPoints(NossobC[, c("long", "lat")], proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+# Create SpatialPointsDataFrame
+NossobCsp_df <- SpatialPointsDataFrame(coords = coordinates(NossobCsp), data = NossobC)
+
+# Load country boundaries for Namibia and South Africa
+countries <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Filter for Namibia and South Africa
+namibia_sa <- countries[countries$admin %in% c("Namibia", "South Africa"), ]
+
+# Convert sf object to sp object
+namibia_sa_sp <- as(namibia_sa, "Spatial")
+
+# Handle NA values in wl_mbgl
+NossobCsp_df <- NossobCsp_df[!is.na(NossobCsp_df$wl_mbgl), ]
+NossobCsp_df$wl_mbgl <- as.numeric(as.character(NossobCsp_df$wl_mbgl))
+
+# Check for NA values after conversion
+if (any(is.na(NossobCsp_df$wl_mbgl))) {
+    stop("There are still NA values in the 'wl_mbgl' column after conversion.")
+}
+
+# Define appropriate cuts based on the range of 'wl_mbgl'
+cuts <- quantile(NossobCsp_df$wl_mbgl, probs = seq(0, 1, length.out = 6), na.rm = TRUE)
+
+# Set up a palette of interpolated colors
+blues <- colorRampPalette(c('yellow', 'orange', 'blue', 'dark blue'))
+
+# Prepare layout for plotting
+pols <- list("sp.polygons", namibia_sa_sp, fill = "lightgray")
+
+# Plotting
+spplot(NossobCsp_df, 'wl_mbgl', cuts = cuts, col.regions = blues(5), sp.layout = pols, pch = 20, cex = 2)
+
+```
+
+
+
+
+
+
+To improve generated map of groundwater and showing boundaries of Namibia and South-Africa [Figure 3]: 
+
+
+```{r Map overlying and Modification}
+# Install required packages
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    install.packages("ggplot2")
+}
+if (!requireNamespace("sf", quietly = TRUE)) {
+    install.packages("sf")
+}
+if (!requireNamespace("rnaturalearth", quietly = TRUE)) {
+    install.packages("rnaturalearth")
+}
+if (!requireNamespace("rnaturalearthdata", quietly = TRUE)) {
+    install.packages("rnaturalearthdata")
+}
+
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+
+NossobC <- Nossob[complete.cases(Nossob[, c("long", "lat", "wl_mbgl")]), ]
+NossobC <- as.data.frame(NossobC)
+
+# Load country boundaries for Namibia and South Africa
+countries <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Filter for Namibia and South Africa
+namibia_sa <- countries[countries$admin %in% c("Namibia", "South Africa"), ]
+
+# Handle NA values in wl_mbgl
+NossobC <- NossobC[!is.na(NossobC$wl_mbgl), ]
+NossobC$wl_mbgl <- as.numeric(as.character(NossobC$wl_mbgl))
+
+# Convert to sf object
+Nossob_sf <- st_as_sf(NossobC, coords = c("long", "lat"), crs = 4326)
+
+# Create the plot
+ggplot() +
+    geom_sf(data = namibia_sa, fill = "lightgray", color = "black") +
+    geom_sf(data = Nossob_sf, aes(color = wl_mbgl), size = 2) +
+    scale_color_gradient(low = "yellow", high = "darkblue") +
+    labs(title = "Water Level Measurements in Namibia and South Africa",
+         color = "Water Level (mbgl)") +
+    theme_minimal() +
+    coord_sf(xlim = c(13, 25), ylim = c(-35, -17))  # Adjust limits as needed
+
+```
+
+
+
+
+
+
+
+
+
+
+
+To plot the correlation of Nitrate, Sulfate and Fluoride [Figures 4 & 5]: 
+```{r 2nd- Nitrate, Sulfate and Fluoride Correlation, echo=FALSE}
+
+# Load necessary libraries
+install.packages("corrplot")
+library(corrplot)
+
+# Select the relevant columns for correlation analysis
+colnames(Nossob)
+correlation_data <- Nossob[, c("NO3_mg_l", "so4_mg_l", "f_mg_l")]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(correlation_data, use = "complete.obs")
+
+# Plot the correlation matrix using corrplot
+corrplot(cor_matrix, method = "circle", type = "upper", 
+         tl.col = "black", tl.srt = 45, 
+         title = "Correlation Matrix for Nitrate, Sulfate, and Fluoride")
+
+# Use pairs() for a scatterplot matrix
+pairs(correlation_data, main = "Scatterplot Matrix for Nitrate, Sulfate, and Fluoride")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+To Develop linear regressions between single pairs of variables (Nitrate ~ Chloride),  (Fluoride ~ Sulfate) [Figures 6 & 7]: 
+```{r 3rd- Linear regression, echo=FALSE}
+
+# Create a clean data frame without missing values for both analyses
+clean_data <- na.omit(Nossob[, c("NO3_mg_l", "tds_mg_l", "f_mg_l", "so4_mg_l")])
+
+# Linear regression for Nitrate ~ TDS (Chloride)
+nitrate_tds_model <- lm(NO3_mg_l ~ tds_mg_l, data = Nossob)
+summary(nitrate_tds_model)
+
+# Linear regression for Fluoride ~ Sulfate
+fluoride_sulfate_model <- lm(f_mg_l ~ so4_mg_l, data = Nossob)
+summary(fluoride_sulfate_model)
+
+# Create a dataframe without missing values for plotting Nitrate vs. TDS
+nitrate_tds_data <- na.omit(Nossob[, c("NO3_mg_l", "tds_mg_l")])
+
+# Plot for Nitrate vs. TDS (Chloride)
+plot(nitrate_tds_data$tds_mg_l, nitrate_tds_data$NO3_mg_l,
+     xlab = "TDS (mg/L)", ylab = "Nitrate (mg/L)",
+     main = "Nitrate vs. TDS (Chloride)")
+abline(lm(NO3_mg_l ~ tds_mg_l, data = nitrate_tds_data), col = "blue")
+
+# Create a clean data frame without missing values for Fluoride and SO4
+fluoride_so4_data <- Nossob[!is.na(Nossob$f_mg_l) & !is.na(Nossob$so4_mg_l), 
+                              c("f_mg_l", "so4_mg_l")]
+
+# Check the dimensions of the clean data
+cat("Number of rows in clean data for Fluoride and SO4:", nrow(fluoride_so4_data), "\n")
+
+# Ensure both columns have the same length
+if (nrow(fluoride_so4_data) > 0) {
+    # Plot for Fluoride vs. SO4
+    plot(fluoride_so4_data$so4_mg_l, fluoride_so4_data$f_mg_l,
+         xlab = "Sulfate (mg/L)", ylab = "Fluoride (mg/L)",
+         main = "Fluoride vs. SO4")
+    abline(lm(f_mg_l ~ so4_mg_l, data = fluoride_so4_data), col = "red")
+} else {
+    cat("No data available for plotting Fluoride vs. SO4.\n")
+}
+
+# To calculate P-values and R-squared values: 
+
+# For Nitrate vs. TDS model
+nitrate_tds_model <- lm(NO3_mg_l ~ tds_mg_l, data = Nossob)  # Replace Nossob with your actual data frame name
+nitrate_summary <- summary(nitrate_tds_model)
+
+# Extract p-value and R-squared for Nitrate vs. TDS
+nitrate_p_value <- nitrate_summary$coefficients[2, 4]  # p-value for tds_mg_l
+nitrate_r_squared <- nitrate_summary$r.squared
+
+cat("Nitrate vs. TDS: P-Value =", nitrate_p_value, " R-Squared =", nitrate_r_squared, "\n")
+
+# For Fluoride vs. SO4 model
+fluoride_sulfate_model <- lm(f_mg_l ~ so4_mg_l, data = fluoride_so4_data)  # Ensure fluoride_so4_data is defined
+fluoride_summary <- summary(fluoride_sulfate_model)
+
+# Extract p-value and R-squared for Fluoride vs. SO4
+fluoride_p_value <- fluoride_summary$coefficients[2, 4]  # p-value for so4_mg_l
+fluoride_r_squared <- fluoride_summary$r.squared
+
+cat("Fluoride vs. SO4: P-Value =", fluoride_p_value, " R-Squared =", fluoride_r_squared, "\n")
+
+``````
+Is one of these linear regressions significant?
+The blue line in figure 6 represents the linear relationship between Nitrate and TDS (Chloride), while the red line in figure 7 shows the relationship between Fluoride and SO4 (Sulfate). A positive slope indicates a positive relationship. 
+To understand the significance of any linear regression: 
+1) we have to calculate R-squared values which Indicates how well the independent variable(s) explain the variability in the dependent variable. A higher value suggests a better model fit. 
+2) In addition, P-Value that Indicates the significance of the relationship between variables. A low p-value suggests that the relationship is significant. 
+as the code calculated: 
+Nitrate vs. TDS:        P-Value = 2.666566e-07        R-Squared = 0.213049 
+Fluoride vs. SO4:      P-Value = 0.05184208           R-Squared = 0.05294456  
+As we can conclude, the linear regression for Nitrate VS TDS has a bigger R-squared value and a lower P value, which indicates that this regression is significant. 
+
+
+
+
+
+
+
+a multiple regression for the dependent target variable nitrate and the independent variables that may explain nitrate concentrations [Figures 8]: 
+```{r 4th- Multiple regression, echo=FALSE}
+library(corrplot)
+library(readxl)
+
+plot(Nossob$so4_mg_l, Nossob$NO3_mg_l, xlab="SO4", ylab="NO3", 
+   pch = 19, lwd=1.5, cex=1.5)
+# multiple scatterplots
+pairs(Nossob[, c("so4_mg_l", "f_mg_l", "NO3_mg_l", "tds_mg_l" )])
+# For correlatioin plots only numerical variables can be used
+# Therefore we create a subset of the numerical variables chemistrynum
+# by substracting the first and second column that contain depth and location
+Nossobnum <- Nossob[c(-1,-2)]
+# The correlation plot helps to identify the type of correlation
+corrplot(cor(Nossobnum))
+```
+
+
+
+
+
+
+
+
+Cluster analysis of the hydrochemistry [Figures 9 & 10]: 
+```{r 5th- Cluster analysis, echo=FALSE}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Identify hydrochemistry columns 
+hydrochemistry_columns <- c("tds_mg_l", "so4_mg_l", "NO3_mg_l", "f_mg_l", "t_m2_d", "ec_ms_m", "wl_mbgl")
+
+# Filter the dataset to include only hydrochemistry columns
+Nossob_hydrochemistry <- Nossob[, hydrochemistry_columns]
+
+# Check initial data dimensions
+cat("Initial dimensions of hydrochemistry data:", dim(Nossob_hydrochemistry), "\n")
+
+# Evaluate missingness
+missing_counts <- colSums(is.na(Nossob_hydrochemistry))
+print("Missing counts per column:")
+print(missing_counts)
+
+# Check dimensions after removing columns
+cat("Dimensions after removing excessive missing columns:", dim(Nossob_hydrochemistry), "\n")
+
+# Impute remaining missing values using median
+for (i in seq_along(Nossob_hydrochemistry)) {
+    if (is.numeric(Nossob_hydrochemistry[[i]])) {
+        Nossob_hydrochemistry[[i]][is.na(Nossob_hydrochemistry[[i]])] <- median(Nossob_hydrochemistry[[i]], na.rm = TRUE)  # Replace NA with column median
+    }
+}
+
+# Check for remaining non-finite values
+non_finite_counts <- sapply(Nossob_hydrochemistry, function(x) sum(!is.finite(x)))
+if (any(non_finite_counts > 0)) {
+    cat("There are still non-finite values in the dataset.\n")
+    print(non_finite_counts[non_finite_counts > 0])  # Display counts of non-finite values
+} else {
+    # Scale the data
+    Nossob_scaled <- scale(Nossob_hydrochemistry)  # Standardize the dataset
+
+    # Check the number of unique data points
+    unique_points <- nrow(unique(Nossob_scaled))
+    cat("Number of unique data points:", unique_points, "\n")
+
+    if (unique_points > 0) {
+        # Step 6: Determine the optimal number of clusters using the Elbow Method
+        wss <- numeric(10)
+        for (i in 1:10) {
+            if (i <= unique_points) {
+                wss[i] <- sum(kmeans(Nossob_scaled, centers = i, nstart = 25)$withinss)
+            } else {
+                wss[i] <- NA  # Assign NA if more clusters than unique points
+            }
+        }
+
+        # Plot the Elbow Method
+        plot(1:10, wss, type = "b", pch = 19, xlab = "Number of Clusters", ylab = "Within-cluster Sum of Squares")
+
+        # Run K-Means with a chosen number of clusters (e.g., min(unique_points, 3))
+        num_clusters <- min(unique_points, 3)  # Adjust clusters based on unique points
+        set.seed(123)  # For reproducibility
+        kmeans_result <- kmeans(Nossob_scaled, centers = num_clusters, nstart = 25)
+
+        # Add cluster assignments to the original hydrochemistry data
+        Nossob_hydrochemistry$Cluster <- as.factor(kmeans_result$cluster)
+
+        # Visualize the clusters
+        ggplot(Nossob_hydrochemistry, aes(x = so4_mg_l, y = NO3_mg_l, color = Cluster)) + 
+            geom_point() + 
+            labs(title = "Cluster Analysis of Hydrochemistry Data", x = "SO4 (mg/L)", y = "NO3 (mg/L)")
+    } else {
+        cat("No unique data points available for clustering.\n")
+    }
+}
+```
+
+Analysis: 
+As we can see, we got two graphs after implementing K-Means clustering method. in which The data was standardized (z-score normalization) using the scale() function. This is important for K-Means, as it ensures that all variables contribute equally to the distance calculations. The Elbow Method was used to determine the optimal number of clusters. This involves calculating the within-cluster sum of squares (WSS) for a range of cluster counts [ the elbow graph for number of clusters]. The kmeans() function was applied to cluster the data based on the chosen number of clusters (derived from the Elbow Method). A scatter plot was created to visualize the clusters, with SO4 plotted against NO3, colored by cluster assignments. 
+The Scatter Plot shows the relationship between sulfate (SO4) and nitrate (NO3) concentrations, colored by cluster assignments. You can see three distinct clusters represented in different colors. There are points that are far from the main groupings, indicating potential outliers or unique samples that might require further investigation. it indicates that the hydrochemistry data points have distinct characteristics based on the variables considered. That might mean we might have different water sources or conditions affecting the hydrochemistry of the samples.
+
+
+
+
+
+
+
+Description of the Model: 
+
+In this analysis, we applied several statistical techniques to study the hydrochemistry of Nossob aquifer, including correlation analysis, linear regression, multiple regression, and K-Means method for clustering analysis.
+Starting with preparing a map of ground water levels helped us to understand the distribution of different points with different characteristics across Namibia and South-Africa. The analysis begins by studying the relationships between different hydrochemical variables. This helped us to understand how Fluoride, sulfate, nitrate, and total dissolved solids, are related to one another.  
+We used linear regression to model the relationship between a dependent variable which is nitrate in our case and one independent variable. This allowed us to understand how changes in one hydrochemical parameter might predict changes in another. We understood how nitrate concentration could be predicted by sulfate levels. The regression coefficients provided insights into these relationships.
+Moreover, multiple regression was implemented to analyze the influence of several independent variables on a single dependent variable. This approach provides more understanding of how different factors interact to affect the hydrochemical characteristics. For example, we could assess how both sulfate and total dissolved solids together influence nitrate concentrations. This model helps in understanding the effects of different hydrochemical parameters.
+Finally, we applied K-Means method for clustering analysis to divide the hydrochemistry data into smaller groups based on similarities in chemical characteristics. This analysis indicated differences in water quality and potential sources of variability.
+On the other hand, the correlation analysis indicated significant relationships between various hydrochemical parameters. A strong correlation between NO3 and SO4 may indicate common sources or processes affecting them both, such as agricultural runoff or industrial discharge.
+The analysis indicated that the aquifer exhibits variability in chemical composition, due to factors such as:
+•	Geological Influences
+•	Agricultural practices, industrial discharges, and urban runoff
+•	Hydrogeological Conditions such as Groundwater flow patterns, recharge areas, and interactions with surface water
+•	Nutrient Levels that may suggest agricultural runoff or wastewater influences
+•	Sulfate Concentrations indicates mineral weathering or contamination. 
+
+Conclusion:
+This analysis provides an understanding of the hydrochemistry of the aquifer. By integrating statistical methods to draw meaningful conclusions and insights that can inform water quality management practices and guide further research into the factors affecting the hydrochemical dynamics of the aquifer.
